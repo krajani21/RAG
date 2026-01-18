@@ -1,0 +1,155 @@
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+  schemas   = ["public", "other_schema"]
+}
+
+model authUser {
+  id              String  @id @map("id") @db.Uuid // Should match Supabase Auth user.id
+  email           String  @unique
+  name            String
+  isCreator       Boolean
+  avatarUrl       String?
+  subscriberCount Int?
+  revenue         Float?
+  accessToken     String?
+
+  content              Content[]
+  scrapedVideos        ScrapedVideo[]
+  instagramReel        InstagramReel[]
+  content_Vectors      content_vectors[]
+  creatorBilling       CreatorBilling[]
+  fanAccessesAsFan     FanAccess[]       @relation("FanAccessFan")
+  fanAccessesAsCreator FanAccess[]       @relation("FanAccessCreator")
+
+  @@schema("public")
+}
+
+model Content {
+  contentId  String            @id @default(uuid()) @db.Uuid
+  userId     String            @db.Uuid
+  sourceType SourceType
+  transcript String
+  videoId    String?
+  title      String?
+  createdAt  DateTime          @default(now())
+  comment    String?
+  user       authUser          @relation(fields: [userId], references: [id])
+  vectors    content_vectors[]
+
+  @@index([userId, videoId])
+
+  @@schema("public")
+}
+
+model content_vectors {
+  id        String @id @default(cuid())
+  contentId String @db.Uuid
+  creatorId String @db.Uuid
+
+  contentText String
+  metadata    Json?
+  sourceType  SourceType
+  createdAt   DateTime   @default(now())
+
+  content Content  @relation(fields: [contentId], references: [contentId], onDelete: Cascade)
+  creator authUser @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@index([creatorId, contentId])
+
+  @@schema("public")
+}
+
+model CreatorBilling {
+  id     String   @id @default(uuid()) @db.Uuid
+  userId String   @unique @db.Uuid
+  user   authUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  stripeCustomerId String? // Stores Stripe Connect account ID
+  hasPaid          Boolean @default(false)
+  plan             String? // Growth / Pro
+  tier             String? // monthly / yearly
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@schema("public")
+}
+
+model FanAccess {
+  id String @id @default(uuid()) @db.Uuid
+
+  fanId String   @db.Uuid
+  fan   authUser @relation("FanAccessFan", fields: [fanId], references: [id], onDelete: Cascade)
+
+  creatorId String   @db.Uuid
+  creator   authUser @relation("FanAccessCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+
+  status     String
+  accessType String
+  expiresAt  DateTime?
+
+  subscriptionLink  String? // optional subscription link
+  checkoutSessionId String? @unique
+  paymentIntentId   String?
+  amountCents       Int
+  currency          String  @default("usd")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([fanId, creatorId], name: "fanId_creatorId")
+
+  @@schema("public")
+}
+
+model ScrapedVideo {
+  id          String    @id @default(cuid())
+  userId      String    @db.Uuid
+  user        authUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  videoUrl    String    @unique
+  thumbnail   String?
+  publishedAt DateTime?
+  transcript  String?
+  comments    String[] // If using Postgres array support
+  createdAt   DateTime  @default(now())
+
+  @@schema("public")
+}
+
+model InstagramReel {
+  id         String   @id @default(cuid())
+  userId     String   @db.Uuid
+  user       authUser @relation(fields: [userId], references: [id])
+  username   String
+  videoUrl   String
+  reelUrl    String   @unique
+  transcript String?
+  comments   String[] // Stored as text[] in Postgres
+  createdAt  DateTime @default(now())
+
+  @@schema("public")
+}
+
+enum SourceType {
+  youtube
+  instagram
+  pdf
+  other
+
+  @@schema("public")  
+}
+
+enum Role {
+  creator
+  fan
+
+  @@schema("public")
+}

@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "miniget": "^4.2.3",
+    "ytdl-core": "^4.11.5"
+  }
+}
